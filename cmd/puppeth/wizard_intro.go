@@ -29,9 +29,15 @@ import (
 )
 
 // makeWizard creates and returns a new puppeth wizard.
-func makeWizard(network string) *wizard {
+func makeWizard(network string, consensys string, period uint64, sealaccount string, prefundedaccount string, networkID uint64, newgenesis uint64) *wizard {
 	return &wizard{
 		network: network,
+                consensys: consensys,
+                period: period,
+                sealaccount: sealaccount,
+                prefundedaccount: prefundedaccount,
+                networkID: networkID,
+                newgenesis: newgenesis,
 		conf: config{
 			Servers: make(map[string][]byte),
 		},
@@ -112,6 +118,13 @@ func (w *wizard) run() {
 		}
 		//fmt.Println(" 5. ProTips for common usecases")
 
+                if w.newgenesis != 0 {
+                    w.makeGenesis()
+                    w.manageGenesis()
+		    fmt.Println("Generate a genesis file sucessfully")
+
+                    break
+                }
 		choice := w.read()
 		switch {
 		case choice == "" || choice == "1":

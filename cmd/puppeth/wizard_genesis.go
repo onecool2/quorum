@@ -24,6 +24,7 @@ import (
 	"math/big"
 	"math/rand"
 	"time"
+    "strings"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
@@ -45,6 +46,7 @@ func (w *wizard) makeGenesis() {
 			EIP155Block:    big.NewInt(3),
 			EIP158Block:    big.NewInt(3),
 			ByzantiumBlock: big.NewInt(4),
+            IsQuorum:       true,
 		},
 	}
 	// Figure out which consensus engine to choose
@@ -52,39 +54,58 @@ func (w *wizard) makeGenesis() {
 	fmt.Println("Which consensus engine to use? (default = clique)")
 	fmt.Println(" 1. Ethash - proof-of-work")
 	fmt.Println(" 2. Clique - proof-of-authority")
-
-	choice := w.read()
+    var choice string
+    if w.consensys == "poa" {
+        choice = "2"
+        fmt.Println("non-interactive choice poa")
+    }else{
+	    choice = w.read()
+    }
 	switch {
 	case choice == "1":
-		// In case of ethash, we're pretty much done
-		genesis.Config.Ethash = new(params.EthashConfig)
-		genesis.ExtraData = make([]byte, 32)
+	    // In case of ethash, we're pretty much done
+	    genesis.Config.Ethash = new(params.EthashConfig)
+	    genesis.ExtraData = make([]byte, 32)
 
 	case choice == "" || choice == "2":
-		// In the case of clique, configure the consensus parameters
-		genesis.Difficulty = big.NewInt(1)
+	    // In the case of clique, configure the consensus parameters
+	    genesis.Difficulty = big.NewInt(1)
 		genesis.Config.Clique = &params.CliqueConfig{
 			Period: 15,
 			Epoch:  30000,
 		}
 		fmt.Println()
 		fmt.Println("How many seconds should blocks take? (default = 15)")
-		genesis.Config.Clique.Period = uint64(w.readDefaultInt(15))
+        if w.period == 0 {
+		    genesis.Config.Clique.Period = uint64(w.readDefaultInt(15))
+        }else{
+            genesis.Config.Clique.Period = w.period
+            fmt.Println("non-interactive: period=", genesis.Config.Clique.Period)
+        }
 
 		// We also need the initial list of signers
 		fmt.Println()
 		fmt.Println("Which accounts are allowed to seal? (mandatory at least one)")
 
 		var signers []common.Address
-		for {
-			if address := w.readAddress(); address != nil {
-				signers = append(signers, *address)
-				continue
-			}
-			if len(signers) > 0 {
-				break
-			}
-		}
+        if w.sealaccount == "" {
+		   for {
+		       if address := w.readAddress(); address != nil {
+				    signers = append(signers, *address)
+				    continue
+			   }
+			   if len(signers) > 0 {
+			       break
+			   }
+		   }
+        }else{
+           account := strings.Split(w.sealaccount, ",")
+           for n := 0; n < len(account); n++ {
+			   if address := w.readAddressFromVarible(account[n]); address != nil {
+				    signers = append(signers, *address)
+		       } 
+            }
+        }
 		// Sort the signers and embed into the extra-data section
 		for i := 0; i < len(signers); i++ {
 			for j := i + 1; j < len(signers); j++ {
@@ -101,19 +122,32 @@ func (w *wizard) makeGenesis() {
 	default:
 		log.Crit("Invalid consensus engine choice", "choice", choice)
 	}
+	
+
 	// Consensus all set, just ask for initial funds and go
 	fmt.Println()
 	fmt.Println("Which accounts should be pre-funded? (advisable at least one)")
-	for {
-		// Read the address of the account to fund
-		if address := w.readAddress(); address != nil {
-			genesis.Alloc[*address] = core.GenesisAccount{
-				Balance: new(big.Int).Lsh(big.NewInt(1), 256-7), // 2^256 / 128 (allow many pre-funds without balance overflows)
-			}
-			continue
-		}
-		break
-	}
+    if w.prefundedaccount == "" {
+	    for {
+		    // Read the address of the account to fund
+		    if address := w.readAddress(); address != nil {
+			    genesis.Alloc[*address] = core.GenesisAccount{
+				    Balance: new(big.Int).Lsh(big.NewInt(1), 256-7), // 2^256 / 128 (allow many pre-funds without balance overflows)
+			    }
+			    continue
+		    }
+		    break
+	    }
+    }else{
+        account := strings.Split(w.prefundedaccount, ",")
+        for n := 0; n < len(account); n++ {
+		    if address := w.readAddressFromVarible(account[n]); address != nil {
+			    genesis.Alloc[*address] = core.GenesisAccount{
+				    Balance: new(big.Int).Lsh(big.NewInt(1), 256-7), // 2^256 / 128 (allow many pre-funds without balance overflows)
+			    }
+	       } 
+        }
+    }
 	// Add a batch of precompile balances to avoid them getting deleted
 	for i := int64(0); i < 256; i++ {
 		genesis.Alloc[common.BigToAddress(big.NewInt(i))] = core.GenesisAccount{Balance: big.NewInt(1)}
@@ -123,17 +157,22 @@ func (w *wizard) makeGenesis() {
 	// Query the user for some custom extras
 	fmt.Println()
 	fmt.Println("Specify your chain/network ID if you want an explicit one (default = random)")
-	genesis.Config.ChainId = new(big.Int).SetUint64(uint64(w.readDefaultInt(rand.Intn(65536))))
-
+    if w.networkID == 0 {
+	    genesis.Config.ChainId = new(big.Int).SetUint64(uint64(w.readDefaultInt(rand.Intn(65536))))
+    }else{
+	    genesis.Config.ChainId = new(big.Int).SetUint64(uint64(w.networkID))
+        fmt.Println("non-interacive: ChainId=", genesis.Config.ChainId)
+    }
 	fmt.Println()
-	fmt.Println("Anything fun to embed into the genesis block? (max 32 bytes)")
 
-	extra := w.read()
-	if len(extra) > 32 {
-		extra = extra[:32]
-	}
-	genesis.ExtraData = append([]byte(extra), genesis.ExtraData[len(extra):]...)
-
+    if w.newgenesis == 0 {
+	    fmt.Println("Anything fun to embed into the genesis block? (max 32 bytes)")
+	    extra := w.read()
+	    if len(extra) > 32 {
+		    extra = extra[:32]
+	        genesis.ExtraData = append([]byte(extra), genesis.ExtraData[len(extra):]...)
+	    }
+    }
 	// All done, store the genesis and flush to disk
 	w.conf.genesis = genesis
 }
@@ -145,8 +184,12 @@ func (w *wizard) manageGenesis() {
 	fmt.Println()
 	fmt.Println(" 1. Modify existing fork rules")
 	fmt.Println(" 2. Export genesis configuration")
-
-	choice := w.read()
+    var choice string
+    if w.newgenesis == 0 {
+ 	    choice = w.read()
+    }else{
+        choice = "2"
+    }
 	switch {
 	case choice == "1":
 		// Fork rule updating requested, iterate over each fork
@@ -178,11 +221,19 @@ func (w *wizard) manageGenesis() {
 		fmt.Println()
 		fmt.Printf("Which file to save the genesis into? (default = %s.json)\n", w.network)
 		out, _ := json.MarshalIndent(w.conf.genesis, "", "  ")
-		if err := ioutil.WriteFile(w.readDefaultString(fmt.Sprintf("%s.json", w.network)), out, 0644); err != nil {
-			log.Error("Failed to save genesis file", "err", err)
+        if w.newgenesis == 0 {
+		    if err := ioutil.WriteFile(w.readDefaultString(fmt.Sprintf("%s.json", w.network)), out, 0644); err != nil {
+			    log.Error("Failed to save genesis file", "err", err)
+            }else{
+		        log.Info("Exported existing genesis block")
+            }
+        }else{
+            if err := ioutil.WriteFile((fmt.Sprintf("%s.json", w.network)), out, 0644); err != nil {
+			    log.Error("Failed to save genesis file", "err", err)
+            }else{
+		        log.Info("Exported existing genesis block")
+            }
 		}
-		log.Info("Exported existing genesis block")
-
 	default:
 		log.Error("That's not something I can do")
 	}

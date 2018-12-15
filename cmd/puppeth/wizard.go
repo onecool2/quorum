@@ -44,6 +44,7 @@ type config struct {
 	bootFull  []string      // Bootnodes to always connect to by full nodes
 	bootLight []string      // Bootnodes to always connect to by light nodes
 	ethstats  string        // Ethstats settings to cache for node deploys
+ 
 
 	Servers map[string][]byte `json:"servers,omitempty"`
 }
@@ -77,6 +78,12 @@ type wizard struct {
 	services map[string][]string   // Ethereum services known to be running on servers
 
 	in *bufio.Reader // Wrapper around stdin to allow reading user input
+        newgenesis uint64        // For non-interactive 
+        consensys string       // For non-interactive input poa or pow
+        period uint64          // For non-interactive 
+        sealaccount string     // For non-interactive 
+        prefundedaccount string // For non-interactive 
+        networkID uint64         // For non-interactive
 }
 
 // read reads a single line from stdin, trimming if from spaces.
@@ -249,6 +256,31 @@ func (w *wizard) readAddress() *common.Address {
 		if err != nil {
 			log.Crit("Failed to read user input", "err", err)
 		}
+		if text = strings.TrimSpace(text); text == "" {
+			return nil
+		}
+		// Make sure it looks ok and return it if so
+		if len(text) != 40 {
+			log.Error("Invalid address length, please retry")
+			continue
+		}
+		bigaddr, _ := new(big.Int).SetString(text, 16)
+		address := common.BigToAddress(bigaddr)
+		return &address
+	}
+}
+
+func (w *wizard) readAddressFromVarible(text string) *common.Address {
+	for {
+		fmt.Println("> 0x", text)
+		// Read the address from the user
+	        /*
+                text, err := w.in.ReadString('\n')
+		
+                if err != nil {
+			log.Crit("Failed to read user input", "err", err)
+		}
+                */
 		if text = strings.TrimSpace(text); text == "" {
 			return nil
 		}

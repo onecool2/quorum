@@ -32,10 +32,34 @@ func main() {
 	app.Name = "puppeth"
 	app.Usage = "assemble and maintain private Ethereum networks"
 	app.Flags = []cli.Flag{
+                cli.IntFlag{
+			Name:  "newgenesis",
+			Usage: "Configure new genesis",
+               	},
 		cli.StringFlag{
 			Name:  "network",
 			Usage: "name of the network to administer",
-		},
+               	},
+                cli.StringFlag{
+			Name:  "consensys",
+			Usage: "Which consensus engine to use",
+               	},
+                cli.IntFlag{
+			Name:  "period",
+			Usage: "How many seconds should blocks take",
+               	},
+                cli.StringFlag{
+			Name:  "sealaccount",
+			Usage: "Which accounts are allowed to seal",
+               	},
+                cli.StringFlag{
+			Name:  "prefundedaccount",
+			Usage: "Which accounts should be pre-funded",
+               	},
+                cli.IntFlag{
+			Name:  "networkID",
+			Usage: "Specify your chain/network ID if you want an explicit one",
+               	},
 		cli.IntFlag{
 			Name:  "loglevel",
 			Value: 4,
@@ -48,7 +72,7 @@ func main() {
 		rand.Seed(time.Now().UnixNano())
 
 		// Start the wizard and relinquish control
-		makeWizard(c.String("network")).run()
+		makeWizard(c.String("network"), c.String("consensys"), c.Uint64("period"), c.String("sealaccount"), c.String("prefundedaccount"), c.Uint64("networkID"), c.Uint64("newgenesis")).run()
 		return nil
 	}
 	app.Run(os.Args)
